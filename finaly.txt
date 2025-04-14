@@ -1,0 +1,91 @@
+#include <mpi.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+void compareExchange(int* a, int* b, int dir) {
+    if ((*a > *b && dir == 1) || (*a < *b && dir == 0)) {
+        int temp = *a;
+        *a = *b;
+        *b = temp;
+    }
+}
+
+void bitonicMerge(int* arr, int start, int length, int dir) {
+    if (length > 1) {
+        int half = length / 2;
+        for (int i = start; i < start + half; i++)
+            compareExchange(&arr[i], &arr[i + half], dir);
+        bitonicMerge(arr, start, half, dir);
+        bitonicMerge(arr, start + half, half, dir);
+    }
+}
+
+void bitonicSort(int* arr, int start, int length, int dir) {
+    if (length > 1) {
+        int half = length / 2;
+        bitonicSort(arr, start, half, 1);        // Sort first half in ascending order
+        bitonicSort(arr, start + half, half, 0); // Sort second half in descending order
+        bitonicMerge(arr, start, length, dir);  // Merge the entire sequence
+    }
+}
+
+int main(int argc, char* argv[]) {
+    int rank, size, n;
+    int* arr = NULL;
+    int* subarr = NULL;
+
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    if (argc != 2) {
+        if (rank == 0)
+            printf("Usage: %s <number_of_elements>\n", argv[0]);
+        MPI_Finalize();
+        return 1;
+    }
+
+    n = atoi(argv[1]);
+    int local_n = n / size;
+
+    if (rank == 0) {
+        arr = (int*)malloc(n * sizeof(int));
+        for (int i = 0; i < n; i++)
+            arr[i] = rand() % 1000; // Generate random data
+
+        printf("Unsorted array:\n");
+        for (int i = 0; i < n; i++)
+            printf("%d ", arr[i]);
+        printf("\n");
+    }
+
+    subarr = (int*)malloc(local_n * sizeof(int));
+    MPI_Scatter(arr, local_n, MPI_INT, subarr, local_n, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Sort subarrays in each process
+    bitonicSort(subarr, 0, local_n, 1);
+
+    // Gather sorted subarrays back to root process
+    int* sortedArr = NULL;
+    if (rank == 0)
+        sortedArr = (int*)malloc(n * sizeof(int));
+
+    MPI_Gather(subarr, local_n, MPI_INT, sortedArr, local_n, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Merge sorted subarrays at root process
+    if (rank == 0) {
+        bitonicSort(sortedArr, 0, n, 1);
+
+        printf("Sorted array:\n");
+        for (int i = 0; i < n; i++)
+            printf("%d ", sortedArr[i]);
+        printf("\n");
+
+        free(arr);
+        free(sortedArr);
+    }
+
+    free(subarr);
+    MPI_Finalize();
+    return 0;
+}
