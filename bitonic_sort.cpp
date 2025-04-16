@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
 	for (int i = 0; i < 64; i++) {
 		printf("%d ", array[i]);
 	}
-	printf("\nnow fuck off process %d of %d\n", process_rank, num_processes);
+	printf("\n process %d of %d\n", process_rank, num_processes);
 	printf("time: %f", timer_stop - timer_start);
 
 	free(array);
